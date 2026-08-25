@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>bd dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header id="topbar">
+    <span class="logo">bd dashboard</span>
+    <span id="live-indicator" class="live-dot" title="Connecting…">● live</span>
+    <input id="search" type="search" placeholder="Search issues…" autocomplete="off" />
+    <nav id="view-tabs">
+      <button class="tab active" data-view="board">Board</button>
+      <button class="tab" data-view="ready">Ready</button>
+      <button class="tab" data-view="graph">Graph</button>
+      <button class="tab" data-view="feed">Feed</button>
+    </nav>
+  </header>
+
+  <div id="app">
+    <!-- Board view (default) -->
+    <div id="view-board" class="view active">
+      <aside id="sidebar">
+        <section id="stats-panel">
+          <h2>Stats</h2>
+          <dl id="stats-list">
+            <div class="stat-row"><dt class="icon-open">○</dt><dd id="stat-open">–</dd><dt class="label">open</dt></div>
+            <div class="stat-row"><dt class="icon-active">◐</dt><dd id="stat-active">–</dd><dt class="label">active</dt></div>
+            <div class="stat-row"><dt class="icon-closed">✓</dt><dd id="stat-closed">–</dd><dt class="label">closed</dt></div>
+            <div class="stat-row"><dt class="icon-blocked">❄</dt><dd id="stat-blocked">–</dd><dt class="label">blocked</dt></div>
+          </dl>
+        </section>
+        <section id="activity-panel">
+          <h2>Activity</h2>
+          <ul id="activity-feed"></ul>
+        </section>
+      </aside>
+      <main id="kanban">
+        <div class="column" data-status="open">
+          <header class="col-header status-open">Open</header>
+          <div class="cards" id="col-open"></div>
+        </div>
+        <div class="column" data-status="in_progress">
+          <header class="col-header status-active">In Progress</header>
+          <div class="cards" id="col-in_progress"></div>
+        </div>
+        <div class="column" data-status="blocked">
+          <header class="col-header status-blocked">Blocked</header>
+          <div class="cards" id="col-blocked"></div>
+        </div>
+        <div class="column" data-status="closed">
+          <header class="col-header status-closed">Closed (today)</header>
+          <div class="cards" id="col-closed"></div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Ready view -->
+    <div id="view-ready" class="view">
+      <main id="ready-list">
+        <table id="ready-table">
+          <thead><tr><th>ID</th><th>Title</th><th>Priority</th><th>Type</th><th>Assignee</th><th></th></tr></thead>
+          <tbody id="ready-rows"></tbody>
+        </table>
+      </main>
+    </div>
+
+    <!-- Graph view -->
+    <div id="view-graph" class="view">
+      <main id="graph-container">
+        <svg id="graph-svg"></svg>
+        <aside id="graph-filters">
+          <h3>Filter</h3>
+          <label><input type="checkbox" class="dep-filter" value="blocks" checked /> blocks</label>
+          <label><input type="checkbox" class="dep-filter" value="related" checked /> related</label>
+          <label><input type="checkbox" class="dep-filter" value="discovered-from" checked /> discovered-from</label>
+        </aside>
+      </main>
+    </div>
+
+    <!-- Feed view -->
+    <div id="view-feed" class="view">
+      <main id="feed-main">
+        <table id="feed-table">
+          <thead><tr><th>Time</th><th>Issue</th><th>Actor</th><th>Event</th><th>Status</th></tr></thead>
+          <tbody id="feed-rows"></tbody>
+        </table>
+      </main>
+    </div>
+  </div>
+
+  <!-- Issue detail panel (slide-in) -->
+  <aside id="detail-panel" class="hidden">
+    <button id="detail-close" title="Close">✕</button>
+    <div id="detail-content"></div>
+  </aside>
+
+  <script src="vendor/d3.v7.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
