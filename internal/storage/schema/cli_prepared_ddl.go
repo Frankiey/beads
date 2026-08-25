@@ -262,4 +262,8 @@ var preparedALTERSafeOnFreshBundle = map[string]string{
 	"0058_heal_wisp_dependencies_split_constraints.up.sql": "(a) Re-adds wisp_dependencies' target FKs and check " +
 		"constraint only where absent; 0021 creates the table with all three. Measured: applying 0058 to the fresh " +
 		"bundle changes nothing.",
+	"0067_add_lease_granted_node.up.sql": "(a) Adds leases.granted_node only where absent; a fresh clone already " +
+		"carries the column from the ignored track (0012 creates leases, 0016 adds granted_node), both run before " +
+		"the main-plane bundle. Measured: bd init on a fresh database, then create/claim/update/list against it, " +
+		"all succeed against granted_node with no 0067 involvement.",
 }
