@@ -422,6 +422,25 @@ td .id-cell { color: var(--open); font-family: var(--font-mono); font-size: 12px
   background: var(--surface2);
   color: var(--text);
 }
+.id-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.copy-id-btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1;
+  padding: 1px 4px;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.copy-id-btn:hover { color: var(--text-bright); background: var(--surface); }
+.copy-id-btn.copied { color: var(--closed); }
+
 .detail-meta .status-open     { color: var(--open); }
 .detail-meta .status-active   { color: var(--active); }
 .detail-meta .status-closed   { color: var(--closed); }

@@ -70,6 +70,40 @@ function reltime(ts) {
   return d.toLocaleDateString();
 }
 
+// Copies text to the clipboard and flashes a checkmark on the triggering
+// button so pasting an id into an agent prompt doesn't require guessing
+// whether the click registered.
+function copyToClipboard(text, btnEl) {
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { console.error('copy failed:', e); }
+    document.body.removeChild(ta);
+  };
+
+  const onCopied = () => {
+    if (!btnEl) return;
+    const original = btnEl.textContent;
+    btnEl.textContent = '✓';
+    btnEl.classList.add('copied');
+    setTimeout(() => {
+      btnEl.textContent = original;
+      btnEl.classList.remove('copied');
+    }, 1200);
+  };
+
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(onCopied).catch(() => { fallback(); onCopied(); });
+  } else {
+    fallback();
+    onCopied();
+  }
+}
+
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -135,12 +169,14 @@ function renderBoard(issues) {
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
+// Field names match types.Statistics' JSON tags (internal/types/types.go),
+// not a nested count_by_status map. blocked_issues is a *int, nil when the
+// backend skipped the blocked-set traversal (bd stats --no-blocked path).
 function renderStats(stats) {
-  const countByStatus = stats.count_by_status || {};
-  document.getElementById('stat-open').textContent    = countByStatus['open'] ?? 0;
-  document.getElementById('stat-active').textContent  = countByStatus['in_progress'] ?? 0;
-  document.getElementById('stat-closed').textContent  = countByStatus['closed'] ?? 0;
-  document.getElementById('stat-blocked').textContent = countByStatus['blocked'] ?? 0;
+  document.getElementById('stat-open').textContent    = stats.open_issues ?? 0;
+  document.getElementById('stat-active').textContent  = stats.in_progress_issues ?? 0;
+  document.getElementById('stat-closed').textContent  = stats.closed_issues ?? 0;
+  document.getElementById('stat-blocked').textContent = stats.blocked_issues ?? 0;
 }
 
 // ── Activity feed (sidebar) ───────────────────────────────────────────────────
@@ -320,13 +356,22 @@ async function openDetail(id) {
 
   content.innerHTML = `
     <div class="detail-meta">
-      <span class="badge mono">${escapeHtml(issue.id)}</span>
+      <span class="badge mono id-badge">
+        ${escapeHtml(issue.id)}
+        <button class="copy-id-btn" id="btn-copy-id" type="button" title="Copy issue ID">⧉</button>
+      </span>
       <span class="badge status-${issue.status}">${statusIcon(issue.status)} ${escapeHtml(issue.status)}</span>
       <span class="badge">${priorityBadge(issue.priority ?? 2)}</span>
       ${issue.issue_type ? `<span class="badge">${escapeHtml(issue.issue_type)}</span>` : ''}
-      ${issue.assignee ? `<span class="badge mono">${escapeHtml(issue.assignee)}</span>` : ''}
+      ${issue.assignee ? `<span class="badge mono">assignee: ${escapeHtml(issue.assignee)}</span>` : ''}
     </div>
     <h1>${escapeHtml(issue.title)}</h1>
+
+    <div class="detail-owner-line" style="font-size:12px;color:var(--text-muted);margin:-8px 0 16px">
+      Owner: ${issue.owner ? `<span style="color:var(--text)">${escapeHtml(issue.owner)}</span>` : 'unknown'}
+      &nbsp;·&nbsp;
+      Last updated: <span style="color:var(--text)" title="${escapeHtml(issue.updated_at || '')}">${issue.updated_at ? reltime(issue.updated_at) : 'unknown'}</span>
+    </div>
 
     ${issue.description ? `
     <div class="detail-section">
@@ -358,6 +403,10 @@ async function openDetail(id) {
   `;
 
   // Wire action buttons.
+  content.querySelector('#btn-copy-id')?.addEventListener('click', (e) => {
+    copyToClipboard(issue.id, e.currentTarget);
+  });
+
   content.querySelector('#btn-claim')?.addEventListener('click', async () => {
     try {
       const updated = await api.post(`/issues/${id}/claim`);
@@ -630,6 +679,7 @@ function connectSSE() {
     state.issues.set(data.id, data);
     if (state.view === 'board') renderBoard([...state.issues.values()]);
     if (state.view === 'graph') renderGraphView();
+    api.get('/stats').then(renderStats).catch((e) => console.error('stats:', e));
   };
 
   es.addEventListener('issue.created', (e) => {
