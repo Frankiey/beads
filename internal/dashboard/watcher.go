@@ -45,9 +45,14 @@ func NewWatcher(store storage.Storage, hub *Hub, interval time.Duration) *Watche
 		eventsQ:  eq,
 		hub:      hub,
 		interval: interval,
-		cursor:   storage.EventCursor{CreatedAt: time.Now().Add(-eventLagSlack)},
+		// UTC: created_at is stored in UTC and the embedded Dolt engine
+		// compares this cursor literally, so a local-zone time.Now() shifts
+		// the cursor forward by the host's UTC offset and it can then never
+		// be exceeded by a real event's created_at — see the same note on
+		// GetEvents's `since` in handlers.go.
+		cursor:   storage.EventCursor{CreatedAt: time.Now().UTC().Add(-eventLagSlack)},
 		seen:     make(map[string]time.Time),
-		lastSeen: time.Now(),
+		lastSeen: time.Now().UTC(),
 	}
 }
 
@@ -101,7 +106,7 @@ func (w *Watcher) poll(ctx context.Context) {
 	// Advance the cursor only up to the safe boundary. Events newer than
 	// the boundary remain unconfirmed and are re-fetched (and deduped via
 	// w.seen) on the next poll.
-	safeBoundary := time.Now().Add(-eventLagSlack)
+	safeBoundary := time.Now().UTC().Add(-eventLagSlack)
 	for i := len(events) - 1; i >= 0; i-- {
 		if !events[i].CreatedAt.After(safeBoundary) {
 			w.cursor = storage.EventCursor{CreatedAt: events[i].CreatedAt, ID: events[i].ID}
@@ -124,7 +129,7 @@ func (w *Watcher) poll(ctx context.Context) {
 // had; kept only as a compatibility fallback.
 func (w *Watcher) pollLegacy(ctx context.Context) {
 	cutoff := w.lastSeen
-	w.lastSeen = time.Now()
+	w.lastSeen = time.Now().UTC()
 
 	events, err := w.store.GetAllEventsSince(ctx, cutoff)
 	if err != nil || len(events) == 0 {

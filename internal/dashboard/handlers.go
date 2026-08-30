@@ -107,12 +107,12 @@ func (h *Handlers) GetGraph(w http.ResponseWriter, r *http.Request) {
 	}
 
 	type Node struct {
-		ID       string      `json:"id"`
-		Title    string      `json:"title"`
+		ID       string       `json:"id"`
+		Title    string       `json:"title"`
 		Status   types.Status `json:"status"`
-		Priority int         `json:"priority"`
-		Type     string      `json:"type"`
-		Assignee string      `json:"assignee,omitempty"`
+		Priority int          `json:"priority"`
+		Type     string       `json:"type"`
+		Assignee string       `json:"assignee,omitempty"`
 	}
 	type Edge struct {
 		From    string `json:"from"`
@@ -175,7 +175,12 @@ func (h *Handlers) GetEvents(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	since := time.Now().Add(-time.Duration(hours) * time.Hour)
+	// UTC: created_at is stored in UTC, and the embedded Dolt engine compares
+	// this bound literally rather than honoring a local offset, so a
+	// local-zone time.Now() silently shifts the cutoff by the host's UTC
+	// offset (on a UTC+2 host, a 1h window would see nothing newer than 1h
+	// ago as measured from a clock 2h ahead of UTC).
+	since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
 	events, err := h.store.GetAllEventsSince(r.Context(), since)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
