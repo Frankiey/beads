@@ -351,7 +351,7 @@ async function openDetail(id) {
   const commentsHtml = comments.length ? comments.map(c => `
     <div style="font-size:12px;margin-bottom:8px">
       <span style="color:var(--text-muted);font-family:var(--font-mono)">${escapeHtml(c.author || '')} · ${reltime(c.created_at)}</span>
-      <p style="margin-top:4px;white-space:pre-wrap">${escapeHtml(c.body || '')}</p>
+      <p style="margin-top:4px;white-space:pre-wrap">${escapeHtml(c.text || '')}</p>
     </div>`).join('') : '<p style="color:var(--text-muted);font-size:12px">None</p>';
 
   content.innerHTML = `
@@ -393,6 +393,10 @@ async function openDetail(id) {
     <div class="detail-section">
       <h3>Activity</h3>
       ${commentsHtml}
+      <form id="comment-form" class="comment-form">
+        <textarea id="comment-text" placeholder="Add a comment to steer this issue…" rows="3"></textarea>
+        <button type="submit" class="btn btn-primary">Comment</button>
+      </form>
     </div>
 
     <div class="detail-actions">
@@ -424,6 +428,18 @@ async function openDetail(id) {
       state.issues.set(updated.id, updated);
       renderBoard([...state.issues.values()]);
       openDetail(id);
+    } catch (e) { console.error(e); }
+  });
+
+  content.querySelector('#comment-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const textEl = content.querySelector('#comment-text');
+    const text = textEl.value.trim();
+    if (!text) return;
+    try {
+      const updated = await api.post(`/issues/${id}/comments`, { text });
+      state.issues.set(updated.id, updated);
+      openDetail(id); // refresh panel with the new comment
     } catch (e) { console.error(e); }
   });
 

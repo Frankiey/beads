@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/steveyegge/beads/internal/storage"
@@ -13,13 +14,19 @@ import (
 
 // Handlers holds the storage reference for REST API handlers.
 type Handlers struct {
-	store    storage.Storage
-	readOnly bool
+	store        storage.Storage
+	readOnly     bool
+	defaultActor string
 }
 
-// NewHandlers creates a Handlers instance.
-func NewHandlers(store storage.Storage, readOnly bool) *Handlers {
-	return &Handlers{store: store, readOnly: readOnly}
+// NewHandlers creates a Handlers instance. defaultActor is used as the
+// comment author when a POST body doesn't supply one (e.g. resolved from
+// git config at server startup), falling back to "dashboard" if empty.
+func NewHandlers(store storage.Storage, readOnly bool, defaultActor string) *Handlers {
+	if defaultActor == "" {
+		defaultActor = "dashboard"
+	}
+	return &Handlers{store: store, readOnly: readOnly, defaultActor: defaultActor}
 }
 
 // writeJSON encodes v as JSON and writes it with status code.
@@ -292,6 +299,35 @@ func (h *Handlers) CloseIssue(w http.ResponseWriter, r *http.Request, id string)
 		reason = "closed via dashboard"
 	}
 	if err := h.store.CloseIssue(r.Context(), id, reason, "dashboard", ""); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.GetIssue(w, r, id)
+}
+
+// AddComment handles POST /api/v1/issues/{id}/comments
+func (h *Handlers) AddComment(w http.ResponseWriter, r *http.Request, id string) {
+	if h.readOnly {
+		writeError(w, http.StatusForbidden, "dashboard is in read-only mode")
+		return
+	}
+	var body struct {
+		Author string `json:"author"`
+		Text   string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if strings.TrimSpace(body.Text) == "" {
+		writeError(w, http.StatusBadRequest, "text is required")
+		return
+	}
+	author := body.Author
+	if author == "" {
+		author = h.defaultActor
+	}
+	if _, err := h.store.AddIssueComment(r.Context(), id, author, body.Text); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

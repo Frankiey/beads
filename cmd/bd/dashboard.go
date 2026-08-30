@@ -37,6 +37,7 @@ The server binds to localhost only and stops when you press Ctrl-C.`,
 			ReadOnly:     readOnly,
 			PollInterval: time.Duration(pollMs) * time.Millisecond,
 			StaticDir:    staticDir,
+			DefaultActor: getActorWithGit(),
 		}
 
 		srv := dashboard.New(store, cfg)

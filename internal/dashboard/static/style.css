@@ -485,6 +485,25 @@ td .id-cell { color: var(--open); font-family: var(--font-mono); font-size: 12px
   margin-top: 20px;
 }
 
+.comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.comment-form textarea {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+.comment-form textarea:focus { outline: none; border-color: var(--open); }
+.comment-form .btn { align-self: flex-end; }
+
 button.btn {
   background: var(--surface2);
   border: 1px solid var(--border);

@@ -28,6 +28,9 @@ type Config struct {
 	// path instead of the go:embed'd static/ tree, so editing app.js/style.css
 	// takes effect on browser refresh with no Go rebuild. Dev-only.
 	StaticDir string
+	// DefaultActor is the comment author used when a request doesn't supply
+	// one, typically resolved from git config at server startup.
+	DefaultActor string
 }
 
 // DefaultConfig returns production defaults.
@@ -58,7 +61,7 @@ func New(store storage.Storage, cfg Config) *Server {
 		store:    store,
 		hub:      hub,
 		watcher:  NewWatcher(store, hub, cfg.PollInterval),
-		handlers: NewHandlers(store, cfg.ReadOnly),
+		handlers: NewHandlers(store, cfg.ReadOnly, cfg.DefaultActor),
 	}
 }
 
@@ -212,6 +215,8 @@ func (s *Server) routeIssueByID(w http.ResponseWriter, r *http.Request) {
 		s.handlers.ClaimIssue(w, r, id)
 	case r.Method == http.MethodPost && action == "close":
 		s.handlers.CloseIssue(w, r, id)
+	case r.Method == http.MethodPost && action == "comments":
+		s.handlers.AddComment(w, r, id)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
