@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -23,6 +24,10 @@ type Config struct {
 	ReadOnly     bool
 	PollInterval time.Duration
 	NoOpen       bool
+	// StaticDir, when non-empty, serves the SPA straight off disk from this
+	// path instead of the go:embed'd static/ tree, so editing app.js/style.css
+	// takes effect on browser refresh with no Go rebuild. Dev-only.
+	StaticDir string
 }
 
 // DefaultConfig returns production defaults.
@@ -95,10 +100,18 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("/api/v1/events", s.handlers.GetEvents)
 	mux.Handle("/api/v1/stream", s.hub)
 
-	// Static SPA — strip the "static/" prefix from the embedded FS.
-	sub, err := fs.Sub(staticFiles, "static")
-	if err != nil {
-		return fmt.Errorf("dashboard: embedded FS error: %w", err)
+	// Static SPA. In dev mode (--static-dir) files are read live off disk so
+	// frontend edits show up on refresh; otherwise strip the "static/" prefix
+	// off the go:embed'd tree baked into the binary.
+	var sub fs.FS
+	if s.cfg.StaticDir != "" {
+		sub = os.DirFS(s.cfg.StaticDir)
+	} else {
+		var err error
+		sub, err = fs.Sub(staticFiles, "static")
+		if err != nil {
+			return fmt.Errorf("dashboard: embedded FS error: %w", err)
+		}
 	}
 	fileServer := http.FileServer(http.FS(sub))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

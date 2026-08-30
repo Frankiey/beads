@@ -23,11 +23,12 @@ The server binds to localhost only and stops when you press Ctrl-C.`,
   bd dashboard --no-open             # Start server without opening browser
   bd dashboard --read-only           # Disable mutations from the UI`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		port, _         := cmd.Flags().GetInt("port")
-		host, _         := cmd.Flags().GetString("host")
-		noOpen, _       := cmd.Flags().GetBool("no-open")
-		readOnly, _     := cmd.Flags().GetBool("read-only")
-		pollMs, _       := cmd.Flags().GetInt("poll-interval")
+		port, _ := cmd.Flags().GetInt("port")
+		host, _ := cmd.Flags().GetString("host")
+		noOpen, _ := cmd.Flags().GetBool("no-open")
+		readOnly, _ := cmd.Flags().GetBool("read-only")
+		pollMs, _ := cmd.Flags().GetInt("poll-interval")
+		staticDir, _ := cmd.Flags().GetString("static-dir")
 
 		cfg := dashboard.Config{
 			Port:         port,
@@ -35,6 +36,7 @@ The server binds to localhost only and stops when you press Ctrl-C.`,
 			NoOpen:       noOpen,
 			ReadOnly:     readOnly,
 			PollInterval: time.Duration(pollMs) * time.Millisecond,
+			StaticDir:    staticDir,
 		}
 
 		srv := dashboard.New(store, cfg)
@@ -61,6 +63,7 @@ func init() {
 	dashboardCmd.Flags().Bool("no-open", false, "Do not open browser automatically")
 	dashboardCmd.Flags().Bool("read-only", false, "Disable mutations from the UI")
 	dashboardCmd.Flags().Int("poll-interval", 250, "Storage poll interval in milliseconds")
+	dashboardCmd.Flags().String("static-dir", "", "Dev mode: serve frontend assets from this directory on disk instead of the embedded build (e.g. internal/dashboard/static)")
 
 	rootCmd.AddCommand(dashboardCmd)
 }
