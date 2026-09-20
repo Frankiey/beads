@@ -371,16 +371,12 @@ type Config struct {
 	ReadOnly       bool   // Open in read-only mode (skip schema init)
 	Preview        bool   // Non-mutating preview: embedded opens skip schema init and refuse writes
 
-	// LenientOpen opens the store leniently: a dirty-working-set refusal
-	// (#4566) skips the migration instead of failing the open, in both
-	// embedded and server mode (New's initSchema call below). Set for
-	// working-set-reconcile commands (bd dolt commit, bd vc commit; #4566),
-	// whose entire purpose is to clear the working set that the migration
-	// would otherwise refuse to touch.
-	//
-	// The separate remote-migrate gate refusal (#4259) is NOT covered by
-	// LenientOpen in server mode — only embedded mode's OpenForWorkingSetReconcile
-	// relaxes that gate today.
+	// LenientOpen opens the store leniently: embedded mode only. A migration
+	// gate refusal (#4259) or a dirty-working-set refusal (#4566) skips the
+	// migration instead of failing the open. Set for working-set-reconcile
+	// commands (bd dolt commit, bd vc commit; #4566), whose entire purpose is
+	// to clear the working set that the migration would otherwise refuse to
+	// touch. Ignored in server mode.
 	LenientOpen bool
 
 	// Server connection options
@@ -2036,27 +2032,7 @@ func newServerMode(ctx context.Context, cfg *Config) (*DoltStore, error) {
 	if !cfg.ReadOnly && !cfg.Gateway {
 		applied, err := store.initSchema(ctx, dbFacts.bootstrapHeal)
 		if err != nil {
-			var dirtyErr *schema.DirtyTablesError
-			if cfg.LenientOpen && errors.As(err, &dirtyErr) {
-				// Mirrors embeddeddolt's openWorkingSetReconcile handling
-				// (#4566): a working-set-reconcile command (bd dolt commit,
-				// bd vc commit) must be able to open the store even when
-				// pending migrations touch dirty tables, or its own open
-				// hits this same refusal before the commit that would clear
-				// the dirty state ever runs, deadlocking. Continue on the
-				// current schema instead of failing the open; applied stays
-				// 0 so rebuildPoolAfterMigration below correctly no-ops.
-				fmt.Fprintf(os.Stderr,
-					"Warning: %v\n"+
-						"  Committing the working set at the current schema; when it completes,\n"+
-						"  re-run 'bd migrate'.\n",
-					dirtyErr)
-				applied = 0
-				err = nil
-			}
-			if err != nil {
-				return nil, fmt.Errorf("failed to initialize schema: %w", err)
-			}
+			return nil, fmt.Errorf("failed to initialize schema: %w", err)
 		}
 		// initSchema runs migrations over a separate pool (openMigrationDB).
 		// The Ping above already pinned a connection in store.db to the
