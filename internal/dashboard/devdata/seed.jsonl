@@ -1,0 +1,11 @@
+{"_type":"issue","id":"mock-epic","title":"Auth System","issue_type":"epic","status":"open","priority":1}
+{"_type":"issue","id":"mock-epic.1","title":"Login flow","issue_type":"feature","status":"open","priority":1,"assignee":"alice","dependencies":[{"issue_id":"mock-epic.1","depends_on_id":"mock-epic","type":"parent-child"}]}
+{"_type":"issue","id":"mock-epic.2","title":"Admin panel","issue_type":"feature","status":"closed","priority":2,"assignee":"bob","close_reason":"done","dependencies":[{"issue_id":"mock-epic.2","depends_on_id":"mock-epic","type":"parent-child"}]}
+{"_type":"issue","id":"mock-epic.1.1","title":"Design login UI","issue_type":"task","status":"in_progress","priority":2,"assignee":"alice","dependencies":[{"issue_id":"mock-epic.1.1","depends_on_id":"mock-epic.1","type":"parent-child"}]}
+{"_type":"issue","id":"mock-epic.1.2","title":"Backend validation","issue_type":"task","status":"open","priority":0,"assignee":"bob","dependencies":[{"issue_id":"mock-epic.1.2","depends_on_id":"mock-epic.1","type":"parent-child"}]}
+{"_type":"issue","id":"mock-epic.1.2.1","title":"Write unit tests","issue_type":"task","status":"open","priority":3,"assignee":"carol","dependencies":[{"issue_id":"mock-epic.1.2.1","depends_on_id":"mock-epic.1.2","type":"parent-child"}]}
+{"_type":"issue","id":"mock-epic.1.2.1.1","title":"Cover edge cases in validation tests","issue_type":"task","status":"open","priority":4,"assignee":"carol","dependencies":[{"issue_id":"mock-epic.1.2.1.1","depends_on_id":"mock-epic.1.2.1","type":"parent-child"}]}
+{"_type":"issue","id":"mock-epic.2.1","title":"Add admin RBAC","issue_type":"task","status":"open","priority":2,"assignee":"dave","dependencies":[{"issue_id":"mock-epic.2.1","depends_on_id":"mock-epic.2","type":"parent-child"}]}
+{"_type":"issue","id":"mock-bug-1","title":"Login button misaligned on Safari","issue_type":"bug","status":"blocked","priority":1,"assignee":"carol"}
+{"_type":"issue","id":"mock-bug-2","title":"Session expires too early","issue_type":"bug","status":"open","priority":1}
+{"_type":"issue","id":"mock-chore-1","title":"Bump dependencies","issue_type":"chore","status":"open","priority":4}

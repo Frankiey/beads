@@ -215,6 +215,8 @@ func (s *Server) routeIssueByID(w http.ResponseWriter, r *http.Request) {
 		s.handlers.ClaimIssue(w, r, id)
 	case r.Method == http.MethodPost && action == "close":
 		s.handlers.CloseIssue(w, r, id)
+	case r.Method == http.MethodPost && action == "reopen":
+		s.handlers.ReopenIssue(w, r, id)
 	case r.Method == http.MethodPost && action == "comments":
 		s.handlers.AddComment(w, r, id)
 	default:

@@ -82,6 +82,71 @@ body {
 }
 #search:focus { border-color: var(--open); }
 
+/* ── Filter bar ──────────────────────────────────────── */
+#filter-bar { position: relative; }
+#filter-bar .hidden { display: none; }
+
+#filter-toggle { display: flex; align-items: center; gap: 6px; }
+
+.filter-count {
+  background: var(--open);
+  color: #0D1017;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 1px 6px;
+  line-height: 1.4;
+}
+
+#filter-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.filter-group { display: flex; flex-direction: column; gap: 4px; }
+
+.filter-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.filter-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.filter-group select,
+.filter-group input[type="text"] {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-bright);
+  padding: 4px 8px;
+  font-size: 13px;
+  outline: none;
+}
+.filter-group select:focus,
+.filter-group input[type="text"]:focus { border-color: var(--open); }
+
 /* ── View tabs ───────────────────────────────────────── */
 #view-tabs { display: flex; gap: 4px; margin-left: auto; }
 
@@ -118,10 +183,44 @@ body {
   border-right: 1px solid var(--border);
   padding: var(--gap);
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: var(--gap);
+  transition: width 0.18s ease, padding 0.18s ease;
 }
+
+/* Collapsed: a narrow rail with just the re-expand toggle, Azure-DevOps-nav
+   style — sections are hidden rather than just clipped so their content
+   can't be tabbed/found while the rail is collapsed. */
+#sidebar.collapsed {
+  width: 32px;
+  padding: var(--gap) 5px;
+}
+#sidebar.collapsed > section { display: none; }
+
+.sidebar-toggle {
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.sidebar-toggle:hover {
+  background: var(--bg);
+  border-color: var(--open);
+  color: var(--open);
+}
+#sidebar.collapsed .sidebar-toggle { align-self: center; }
 
 #sidebar h2 {
   font-size: 11px;
@@ -154,6 +253,109 @@ body {
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
+}
+
+/* ── Pinned shelf ────────────────────────────────────── */
+.pinned-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pinned-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 7px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  border-left: 2px solid var(--deferred);
+  cursor: pointer;
+  font-size: 12px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.pinned-item:hover { border-color: var(--open); background: var(--surface2); }
+.pinned-item .pinned-id {
+  font-family: var(--font-mono);
+  color: var(--text-bright);
+  flex-shrink: 0;
+}
+.pinned-item .pinned-title {
+  flex: 1;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pinned-item .unpin-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.15s, background 0.15s;
+}
+.pinned-item:hover .unpin-btn { opacity: 1; }
+.pinned-item .unpin-btn:hover { color: var(--blocked); background: var(--bg); }
+
+.pin-icon { font-size: 11px; line-height: 1; }
+
+/* ── Close reasons breakdown ─────────────────────────── */
+.close-reasons-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.close-reason-row {
+  display: grid;
+  grid-template-columns: 1fr 32px;
+  grid-template-rows: auto auto;
+  column-gap: 6px;
+  font-size: 11px;
+}
+.close-reason-label {
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.close-reason-count {
+  grid-column: 2;
+  grid-row: 1;
+  text-align: right;
+  color: var(--text-bright);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+.close-reason-bar-track {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.close-reason-bar {
+  height: 100%;
+  background: var(--closed);
+  border-radius: 2px;
+}
+
+.empty-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
 }
 
 .feed-item {
@@ -285,6 +487,76 @@ tr.kbd-selected { background: var(--surface2); }
   font-family: var(--font-mono);
   font-size: 10px;
 }
+
+/* ── Hierarchy tree (nested cards within a column) ──────
+   Depth is expressed as left indent + a guide line, capped visually at
+   MAX_TREE_DEPTH (app.js) so a very deep chain doesn't run a card off the
+   column — the underlying parent-child tree itself is not depth-limited. */
+.issue-card.nested-card {
+  position: relative;
+  border-left: 2px solid var(--border);
+}
+.issue-card.nested-card::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: -6px;
+  width: 10px;
+  height: 18px;
+  border-left: 2px solid var(--border);
+  border-bottom: 2px solid var(--border);
+  border-bottom-left-radius: 6px;
+}
+
+.tree-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: -3px 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+/* Distinct from .issue-card:hover's surface2 fill (which also applies here,
+   the pointer being physically over the card too) so the toggle still reads
+   as its own target instead of blending into the hovered card. */
+.tree-toggle:hover {
+  background: var(--bg);
+  border-color: var(--open);
+  color: var(--open);
+}
+
+/* ── Drag and drop (cards between status columns) ───────
+   HTML5 DnD: dragstart on .issue-card, dragover/drop on .column. Suppressing
+   the browser's ghost-image opacity via .dragging keeps the source card
+   visible while dragging, since we don't create a custom drag image. */
+.issue-card { cursor: grab; }
+.issue-card.dragging { opacity: 0.4; cursor: grabbing; }
+
+.column.drag-over {
+  border-color: var(--open);
+  background: var(--surface2);
+}
+
+.card-parent-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin: -2px 0 4px;
+}
+.card-parent-hint .parent-link {
+  font-family: var(--font-mono);
+  color: var(--open);
+  cursor: pointer;
+}
+.card-parent-hint .parent-link:hover { text-decoration: underline; }
 
 /* ── Ready view ──────────────────────────────────────── */
 #view-ready { overflow: auto; }

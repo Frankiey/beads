@@ -4,6 +4,9 @@
  */
 
 // ── State ────────────────────────────────────────────────────────────────────
+const ALL_TYPES = ['bug', 'feature', 'task', 'epic', 'chore'];
+const ALL_PRIORITIES = [0, 1, 2, 3, 4];
+
 const state = {
   issues: new Map(),   // id → issue object
   stats: {},
@@ -11,7 +14,18 @@ const state = {
   searchQuery: '',
   selectedId: null,
   sseReady: false,
+  filters: {
+    types: new Set(ALL_TYPES),
+    priorities: new Set(ALL_PRIORITIES),
+    assignee: '',
+    label: '',
+  },
 };
+
+// Board-only: ids of parent cards the user has collapsed. Module-level (not
+// on `state`) since it's a pure view preference that should survive re-render
+// but never round-trips through the API or SSE payloads.
+const collapsedNodes = new Set();
 
 // ── API helpers ───────────────────────────────────────────────────────────────
 const api = {
@@ -113,29 +127,73 @@ function escapeHtml(s) {
 }
 
 // ── Issue card ────────────────────────────────────────────────────────────────
-function renderCard(issue) {
+// depth/hasChildren/collapsed are board-tree concerns (buildForest below);
+// other callers (ready table) just omit them and get a depth-0 card.
+function renderCard(issue, { depth = 0, hasChildren = false, collapsed = false } = {}) {
   const card = document.createElement('div');
   card.className = `issue-card status-${issue.status}`;
   card.dataset.id = issue.id;
+
+  const clampedDepth = Math.min(depth, MAX_TREE_DEPTH);
+  if (depth > 0) {
+    card.classList.add('nested-card');
+    card.style.marginLeft = `${clampedDepth * TREE_INDENT_PX}px`;
+  }
+
+  // A card only gets a parent hint when its parent exists but isn't rendered
+  // above it in this column's tree (e.g. parent is in a different status
+  // column) — otherwise the tree indent already shows that relationship.
+  const parentHint = depth === 0 && issue.parent ? issue.parent : null;
+
   card.innerHTML = `
     <div class="card-top">
+      ${hasChildren ? `<button class="tree-toggle" type="button" title="${collapsed ? 'Expand' : 'Collapse'}">${collapsed ? '▸' : '▾'}</button>` : ''}
+      ${issue.pinned ? `<span class="pin-icon" title="Pinned">📌</span>` : ''}
       <span class="card-id">${escapeHtml(issue.id)}</span>
       <span class="card-type-icon" title="${escapeHtml(issue.issue_type || '')}">${typeIcon(issue.issue_type)}</span>
       ${priorityBadge(issue.priority ?? 2)}
     </div>
     <div class="card-title">${escapeHtml(issue.title)}</div>
+    ${parentHint ? `<div class="card-parent-hint">↳ child of <span class="parent-link" data-id="${escapeHtml(parentHint)}">${escapeHtml(parentHint)}</span></div>` : ''}
     <div class="card-bottom">
       ${issue.assignee ? `<span class="assignee-chip">${escapeHtml(issue.assignee)}</span>` : ''}
       <span>${reltime(issue.updated_at)}</span>
     </div>
   `;
   card.addEventListener('click', () => openDetail(issue.id));
+
+  card.draggable = true;
+  card.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', issue.id);
+    e.dataTransfer.effectAllowed = 'move';
+    card.classList.add('dragging');
+  });
+  card.addEventListener('dragend', () => card.classList.remove('dragging'));
+
+  card.querySelector('.tree-toggle')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (collapsedNodes.has(issue.id)) collapsedNodes.delete(issue.id);
+    else collapsedNodes.add(issue.id);
+    renderBoard([...state.issues.values()]);
+  });
+
+  card.querySelector('.parent-link')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDetail(e.currentTarget.dataset.id);
+  });
+
   return card;
 }
 
 // ── Kanban board ──────────────────────────────────────────────────────────────
 const todayStart = new Date();
 todayStart.setHours(0, 0, 0, 0);
+
+// Visual cap only — parent-child chains in beads can nest arbitrarily deep
+// (hierarchical ids like bd-x.1.2.3…); past this depth cards stop indenting
+// further so a long chain can't push a card out of the column.
+const MAX_TREE_DEPTH = 5;
+const TREE_INDENT_PX = 16;
 
 function isToday(issue) {
   if (!issue.closed_at && !issue.updated_at) return false;
@@ -149,12 +207,53 @@ function columnIdFor(issue) {
   return map[issue.status] || null;
 }
 
-function renderBoard(issues) {
-  const cols = { 'col-open': [], 'col-in_progress': [], 'col-blocked': [], 'col-closed': [] };
+function passesFilters(issue) {
   const query = state.searchQuery.toLowerCase();
+  if (query && !issue.title.toLowerCase().includes(query) && !issue.id.toLowerCase().includes(query)) return false;
+
+  const f = state.filters;
+  if (!f.types.has(issue.issue_type || 'task')) return false;
+  if (!f.priorities.has(issue.priority ?? 2)) return false;
+  if (f.assignee && issue.assignee !== f.assignee) return false;
+  if (f.label && !(issue.labels || []).includes(f.label)) return false;
+  return true;
+}
+
+// Groups a column's issues into a parent-child forest using each issue's
+// `parent` field (populated by the backend from the parent-child dependency,
+// be-ym8c). A parent that isn't in this column (different status, or
+// filtered out) makes the child a root here too — renderCard then shows a
+// "child of <id>" hint instead of a tree indent for that case.
+function buildForest(items) {
+  const byId = new Map(items.map(i => [i.id, i]));
+  const childrenOf = new Map();
+  const roots = [];
+
+  for (const issue of items) {
+    if (issue.parent && byId.has(issue.parent)) {
+      if (!childrenOf.has(issue.parent)) childrenOf.set(issue.parent, []);
+      childrenOf.get(issue.parent).push(issue);
+    } else {
+      roots.push(issue);
+    }
+  }
+
+  const byPriority = (a, b) => (a.priority ?? 2) - (b.priority ?? 2);
+  roots.sort(byPriority);
+  for (const kids of childrenOf.values()) kids.sort(byPriority);
+
+  return { roots, childrenOf };
+}
+
+function renderBoard(issues) {
+  syncAssigneeOptions(issues);
+  renderPinned(issues);
+  renderCloseReasons(issues);
+
+  const cols = { 'col-open': [], 'col-in_progress': [], 'col-blocked': [], 'col-closed': [] };
 
   for (const issue of issues) {
-    if (query && !issue.title.toLowerCase().includes(query) && !issue.id.toLowerCase().includes(query)) continue;
+    if (!passesFilters(issue)) continue;
     const col = columnIdFor(issue);
     if (col) cols[col].push(issue);
   }
@@ -163,8 +262,15 @@ function renderBoard(issues) {
     const el = document.getElementById(colId);
     if (!el) continue;
     el.innerHTML = '';
-    items.sort((a, b) => (a.priority ?? 2) - (b.priority ?? 2));
-    for (const issue of items) el.appendChild(renderCard(issue));
+
+    const { roots, childrenOf } = buildForest(items);
+    const appendNode = (issue, depth) => {
+      const kids = childrenOf.get(issue.id) || [];
+      const collapsed = collapsedNodes.has(issue.id);
+      el.appendChild(renderCard(issue, { depth, hasChildren: kids.length > 0, collapsed }));
+      if (!collapsed) for (const kid of kids) appendNode(kid, depth + 1);
+    };
+    for (const root of roots) appendNode(root, 0);
   }
 }
 
@@ -177,6 +283,94 @@ function renderStats(stats) {
   document.getElementById('stat-active').textContent  = stats.in_progress_issues ?? 0;
   document.getElementById('stat-closed').textContent  = stats.closed_issues ?? 0;
   document.getElementById('stat-blocked').textContent = stats.blocked_issues ?? 0;
+}
+
+// ── Pinned shelf ──────────────────────────────────────────────────────────────
+// Pinned beads are persistent context markers, not work items (types.Issue.Pinned),
+// so they get their own sidebar shelf rather than living inside a status column.
+function renderPinned(issues) {
+  const ul = document.getElementById('pinned-list');
+  if (!ul) return;
+  const pinned = issues.filter(i => i.pinned).sort((a, b) => (a.priority ?? 2) - (b.priority ?? 2));
+
+  ul.innerHTML = '';
+  if (pinned.length === 0) {
+    ul.innerHTML = '<li class="empty-hint">No pinned beads</li>';
+    return;
+  }
+  for (const issue of pinned) {
+    const li = document.createElement('li');
+    li.className = 'pinned-item';
+    li.innerHTML = `
+      <span class="card-type-icon" title="${escapeHtml(issue.issue_type || '')}">${typeIcon(issue.issue_type)}</span>
+      <span class="pinned-id">${escapeHtml(issue.id)}</span>
+      <span class="pinned-title">${escapeHtml(issue.title)}</span>
+      <button class="unpin-btn" type="button" title="Unpin">✕</button>
+    `;
+    li.addEventListener('click', () => openDetail(issue.id));
+    li.querySelector('.unpin-btn').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      try {
+        const updated = await api.patch(`/issues/${issue.id}`, { pinned: false });
+        state.issues.set(updated.id, updated);
+        renderBoard([...state.issues.values()]);
+      } catch (err) { console.error(err); }
+    });
+    ul.appendChild(li);
+  }
+}
+
+// ── Close reason breakdown ───────────────────────────────────────────────────
+// Tallies close_reason across whatever issues are currently loaded (the
+// /issues?limit=200 boot fetch plus SSE updates) rather than a fresh
+// server query — close_reason is free text an agent can write anything into,
+// so this is a rough signal, not an exhaustive report. Capped to the top 8
+// distinct reasons so one batch of one-off freeform text can't push the
+// sidebar panel out to the height of the whole close history.
+const MAX_CLOSE_REASON_ROWS = 8;
+
+function renderCloseReasons(issues) {
+  const ul = document.getElementById('close-reasons-list');
+  if (!ul) return;
+
+  const counts = new Map();
+  let total = 0;
+  for (const issue of issues) {
+    if (issue.status !== 'closed' || !issue.close_reason) continue;
+    const reason = issue.close_reason.trim();
+    if (!reason) continue;
+    counts.set(reason, (counts.get(reason) || 0) + 1);
+    total += 1;
+  }
+
+  ul.innerHTML = '';
+  if (total === 0) {
+    ul.innerHTML = '<li class="empty-hint">No closed beads yet</li>';
+    return;
+  }
+
+  const rows = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const shown = rows.slice(0, MAX_CLOSE_REASON_ROWS);
+  const maxCount = shown[0][1];
+
+  for (const [reason, count] of shown) {
+    const pct = Math.round((count / maxCount) * 100);
+    const li = document.createElement('li');
+    li.className = 'close-reason-row';
+    li.innerHTML = `
+      <div class="close-reason-label" title="${escapeHtml(reason)}">${escapeHtml(reason)}</div>
+      <div class="close-reason-count">${count}</div>
+      <div class="close-reason-bar-track"><div class="close-reason-bar" style="width:${pct}%"></div></div>
+    `;
+    ul.appendChild(li);
+  }
+  if (rows.length > MAX_CLOSE_REASON_ROWS) {
+    const rest = rows.slice(MAX_CLOSE_REASON_ROWS).reduce((sum, [, c]) => sum + c, 0);
+    const li = document.createElement('li');
+    li.className = 'empty-hint';
+    li.textContent = `+${rows.length - MAX_CLOSE_REASON_ROWS} more reasons (${rest})`;
+    ul.appendChild(li);
+  }
 }
 
 // ── Activity feed (sidebar) ───────────────────────────────────────────────────
@@ -402,6 +596,7 @@ async function openDetail(id) {
     <div class="detail-actions">
       ${issue.status !== 'in_progress' && issue.status !== 'closed' ? `<button class="btn btn-primary" id="btn-claim">Claim</button>` : ''}
       ${issue.status !== 'closed' ? `<button class="btn btn-danger" id="btn-close">Close</button>` : ''}
+      <button class="btn" id="btn-pin">${issue.pinned ? 'Unpin' : 'Pin'}</button>
       <button class="btn" id="btn-graph">View in Graph</button>
     </div>
   `;
@@ -440,6 +635,15 @@ async function openDetail(id) {
       const updated = await api.post(`/issues/${id}/comments`, { text });
       state.issues.set(updated.id, updated);
       openDetail(id); // refresh panel with the new comment
+    } catch (e) { console.error(e); }
+  });
+
+  content.querySelector('#btn-pin')?.addEventListener('click', async () => {
+    try {
+      const updated = await api.patch(`/issues/${id}`, { pinned: !issue.pinned });
+      state.issues.set(updated.id, updated);
+      renderBoard([...state.issues.values()]);
+      openDetail(id); // refresh panel
     } catch (e) { console.error(e); }
   });
 
@@ -786,6 +990,90 @@ document.getElementById('search').addEventListener('input', (e) => {
   if (state.view === 'board') renderBoard([...state.issues.values()]);
 });
 
+// ── Filters ───────────────────────────────────────────────────────────────────
+// Assignee select is populated from whatever's currently loaded rather than a
+// fixed list, since assignees aren't an enum in beads. Rebuilding it on every
+// render is cheap at dashboard scale and keeps it in sync with new SSE data;
+// the currently-selected value is preserved unless it disappears entirely.
+function syncAssigneeOptions(issues) {
+  const select = document.getElementById('filter-assignee');
+  if (!select) return;
+  const current = select.value;
+  const assignees = [...new Set(issues.map(i => i.assignee).filter(Boolean))].sort();
+  select.innerHTML = '<option value="">All</option>' +
+    assignees.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+  if (assignees.includes(current)) select.value = current;
+  else state.filters.assignee = '';
+}
+
+function updateFilterCount() {
+  const f = state.filters;
+  let n = (ALL_TYPES.length - f.types.size) + (ALL_PRIORITIES.length - f.priorities.size);
+  if (f.assignee) n += 1;
+  if (f.label) n += 1;
+  const badge = document.getElementById('filter-count');
+  badge.textContent = n;
+  badge.classList.toggle('hidden', n === 0);
+}
+
+function applyFiltersAndRerender() {
+  updateFilterCount();
+  if (state.view === 'board') renderBoard([...state.issues.values()]);
+}
+
+document.querySelectorAll('.type-filter').forEach(cb => {
+  cb.addEventListener('change', () => {
+    if (cb.checked) state.filters.types.add(cb.value);
+    else state.filters.types.delete(cb.value);
+    applyFiltersAndRerender();
+  });
+});
+
+document.querySelectorAll('.priority-filter').forEach(cb => {
+  cb.addEventListener('change', () => {
+    const p = Number(cb.value);
+    if (cb.checked) state.filters.priorities.add(p);
+    else state.filters.priorities.delete(p);
+    applyFiltersAndRerender();
+  });
+});
+
+document.getElementById('filter-assignee').addEventListener('change', (e) => {
+  state.filters.assignee = e.target.value;
+  applyFiltersAndRerender();
+});
+
+document.getElementById('filter-label-input').addEventListener('input', (e) => {
+  state.filters.label = e.target.value.trim();
+  applyFiltersAndRerender();
+});
+
+document.getElementById('filter-clear').addEventListener('click', () => {
+  state.filters.types = new Set(ALL_TYPES);
+  state.filters.priorities = new Set(ALL_PRIORITIES);
+  state.filters.assignee = '';
+  state.filters.label = '';
+  document.querySelectorAll('.type-filter, .priority-filter').forEach(cb => { cb.checked = true; });
+  document.getElementById('filter-assignee').value = '';
+  document.getElementById('filter-label-input').value = '';
+  applyFiltersAndRerender();
+});
+
+const filterToggle = document.getElementById('filter-toggle');
+const filterPanel = document.getElementById('filter-panel');
+filterToggle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = filterPanel.classList.toggle('hidden') === false;
+  filterToggle.setAttribute('aria-expanded', String(open));
+});
+document.addEventListener('click', (e) => {
+  if (!filterPanel.classList.contains('hidden') && !filterPanel.contains(e.target) && e.target !== filterToggle) {
+    filterPanel.classList.add('hidden');
+    filterToggle.setAttribute('aria-expanded', 'false');
+  }
+});
+filterPanel.addEventListener('click', (e) => e.stopPropagation());
+
 // ── Wire up tabs ──────────────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(btn => {
   btn.addEventListener('click', () => switchView(btn.dataset.view));
@@ -793,6 +1081,77 @@ document.querySelectorAll('.tab').forEach(btn => {
 
 // ── Wire detail panel close ───────────────────────────────────────────────────
 document.getElementById('detail-close').addEventListener('click', closeDetail);
+
+// ── Sidebar collapse (stats/activity rail) ────────────────────────────────────
+// Collapsed state is a per-viewer UI convenience, not shared/durable data, so
+// it's fine to keep it in localStorage; reads/writes are wrapped since it can
+// throw or be unavailable (private browsing, disabled site data).
+const SIDEBAR_COLLAPSED_KEY = 'bd-dashboard-sidebar-collapsed';
+const sidebarEl = document.getElementById('sidebar');
+const sidebarToggleEl = document.getElementById('sidebar-toggle');
+
+function setSidebarCollapsed(collapsed) {
+  sidebarEl.classList.toggle('collapsed', collapsed);
+  sidebarToggleEl.textContent = collapsed ? '›' : '‹';
+  sidebarToggleEl.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  sidebarToggleEl.setAttribute('aria-expanded', String(!collapsed));
+  try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch {}
+}
+
+sidebarToggleEl.addEventListener('click', () => {
+  setSidebarCollapsed(!sidebarEl.classList.contains('collapsed'));
+});
+
+try {
+  if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1') setSidebarCollapsed(true);
+} catch {}
+
+// ── Drag and drop (move a card to a different status column) ─────────────────
+// Columns are static DOM nodes (only their .cards contents get rebuilt on
+// each renderBoard), so drop targets are wired once here rather than
+// re-wired on every render.
+async function moveIssueToStatus(id, targetStatus) {
+  const issue = state.issues.get(id);
+  if (!issue || issue.status === targetStatus) return;
+  try {
+    let updated;
+    if (targetStatus === 'closed') {
+      updated = await api.post(`/issues/${id}/close`, { reason: 'moved via dashboard' });
+    } else if (issue.status === 'closed') {
+      // Reopen always lands on "open" — closing is more than a status flip
+      // (closed_at, close_reason), so it gets a real reopen first. If the
+      // card was actually dropped on in_progress/blocked, follow up with a
+      // plain status patch to land where the user dropped it.
+      updated = await api.post(`/issues/${id}/reopen`);
+      if (updated.status !== targetStatus) {
+        updated = await api.patch(`/issues/${id}`, { status: targetStatus });
+      }
+    } else {
+      updated = await api.patch(`/issues/${id}`, { status: targetStatus });
+    }
+    state.issues.set(updated.id, updated);
+    renderBoard([...state.issues.values()]);
+  } catch (e) {
+    console.error('move issue:', e);
+  }
+}
+
+document.querySelectorAll('.column').forEach(col => {
+  col.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    col.classList.add('drag-over');
+  });
+  col.addEventListener('dragleave', (e) => {
+    if (!col.contains(e.relatedTarget)) col.classList.remove('drag-over');
+  });
+  col.addEventListener('drop', (e) => {
+    e.preventDefault();
+    col.classList.remove('drag-over');
+    const id = e.dataTransfer.getData('text/plain');
+    if (id) moveIssueToStatus(id, col.dataset.status);
+  });
+});
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 async function boot() {

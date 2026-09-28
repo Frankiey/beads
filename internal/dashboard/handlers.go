@@ -66,7 +66,10 @@ func (h *Handlers) ListIssues(w http.ResponseWriter, r *http.Request) {
 	}
 
 	search := q.Get("q")
-	issues, err := h.store.SearchIssues(r.Context(), search, filter)
+	// WithCounts (not SearchIssues) so each row carries the computed Parent
+	// field (parent-child dep, be-ym8c) — the board view renders it as a
+	// hierarchy tree within each status column.
+	issues, err := h.store.SearchIssuesWithCounts(r.Context(), search, filter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -299,6 +302,19 @@ func (h *Handlers) CloseIssue(w http.ResponseWriter, r *http.Request, id string)
 		reason = "closed via dashboard"
 	}
 	if err := h.store.CloseIssue(r.Context(), id, reason, "dashboard", ""); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	h.GetIssue(w, r, id)
+}
+
+// ReopenIssue handles POST /api/v1/issues/{id}/reopen
+func (h *Handlers) ReopenIssue(w http.ResponseWriter, r *http.Request, id string) {
+	if h.readOnly {
+		writeError(w, http.StatusForbidden, "dashboard is in read-only mode")
+		return
+	}
+	if err := h.store.ReopenIssue(r.Context(), id, "reopened via dashboard", "dashboard"); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

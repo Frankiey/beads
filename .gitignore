@@ -261,3 +261,8 @@ tmp/docs/CLI_REFERENCE.md
 /bazel-*
 /.bazelrc.local
 /user.bazelrc
+
+# Dashboard dev mock: disposable runtime project regenerated from
+# internal/dashboard/devdata/seed.jsonl by run-mock.sh. Never commit its
+# nested git/Dolt state.
+/internal/dashboard/devdata/.mockproject/

@@ -11,6 +11,38 @@
     <span class="logo">bd dashboard</span>
     <span id="live-indicator" class="live-dot" title="Connecting…">● live</span>
     <input id="search" type="search" placeholder="Search issues…" autocomplete="off" />
+    <div id="filter-bar">
+      <button id="filter-toggle" class="btn" type="button" aria-expanded="false" aria-controls="filter-panel">
+        Filters<span id="filter-count" class="filter-count hidden">0</span>
+      </button>
+      <div id="filter-panel" class="hidden">
+        <div class="filter-group">
+          <span class="filter-group-label">Type</span>
+          <label><input type="checkbox" class="type-filter" value="bug" checked /> 🐛 bug</label>
+          <label><input type="checkbox" class="type-filter" value="feature" checked /> ✦ feature</label>
+          <label><input type="checkbox" class="type-filter" value="task" checked /> ◻ task</label>
+          <label><input type="checkbox" class="type-filter" value="epic" checked /> ◈ epic</label>
+          <label><input type="checkbox" class="type-filter" value="chore" checked /> ⚙ chore</label>
+        </div>
+        <div class="filter-group">
+          <span class="filter-group-label">Priority</span>
+          <label><input type="checkbox" class="priority-filter" value="0" checked /> P0</label>
+          <label><input type="checkbox" class="priority-filter" value="1" checked /> P1</label>
+          <label><input type="checkbox" class="priority-filter" value="2" checked /> P2</label>
+          <label><input type="checkbox" class="priority-filter" value="3" checked /> P3</label>
+          <label><input type="checkbox" class="priority-filter" value="4" checked /> P4</label>
+        </div>
+        <div class="filter-group">
+          <span class="filter-group-label">Assignee</span>
+          <select id="filter-assignee"><option value="">All</option></select>
+        </div>
+        <div class="filter-group">
+          <span class="filter-group-label">Label</span>
+          <input id="filter-label-input" type="text" placeholder="label…" autocomplete="off" />
+        </div>
+        <button id="filter-clear" class="btn" type="button">Clear filters</button>
+      </div>
+    </div>
     <nav id="view-tabs">
       <button class="tab active" data-view="board">Board</button>
       <button class="tab" data-view="ready">Ready</button>
@@ -23,6 +55,7 @@
     <!-- Board view (default) -->
     <div id="view-board" class="view active">
       <aside id="sidebar">
+        <button id="sidebar-toggle" class="sidebar-toggle" type="button" title="Collapse sidebar" aria-expanded="true">‹</button>
         <section id="stats-panel">
           <h2>Stats</h2>
           <dl id="stats-list">
@@ -31,6 +64,14 @@
             <div class="stat-row"><dt class="icon-closed">✓</dt><dd id="stat-closed">–</dd><dt class="label">closed</dt></div>
             <div class="stat-row"><dt class="icon-blocked">❄</dt><dd id="stat-blocked">–</dd><dt class="label">blocked</dt></div>
           </dl>
+        </section>
+        <section id="pinned-panel">
+          <h2>Pinned</h2>
+          <ul id="pinned-list" class="pinned-list"></ul>
+        </section>
+        <section id="close-reasons-panel">
+          <h2>Close Reasons</h2>
+          <ul id="close-reasons-list" class="close-reasons-list"></ul>
         </section>
         <section id="activity-panel">
           <h2>Activity</h2>
