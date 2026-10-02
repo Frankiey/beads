@@ -36,6 +36,7 @@ var preMigrationRepairs = map[repairKey]func(context.Context, DBConn) error{
 	{"schema_migrations", 47}:         ensureWispTablesForMixedBlockedRecompute,
 	{"schema_migrations", 53}:         repairV53RigAndSplitTargets,
 	{"schema_migrations", 58}:         repairWispDependenciesForwardShape,
+	{"schema_migrations", 68}:         healCollidedVersionedBeadsSchema,
 	{"ignored_schema_migrations", 7}:  ensureWispIsBlockedForRecompute,
 	{"ignored_schema_migrations", 15}: ensureWispIsBlockedForRecompute,
 }
@@ -59,6 +60,63 @@ func repairV53RigAndSplitTargets(ctx context.Context, db DBConn) error {
 		return err
 	}
 	return ensureDependenciesIDColumn(ctx, db)
+}
+
+// healCollidedVersionedBeadsSchema is the pre-0068 repair for a version-number
+// collision, not a partial-apply: between acb77fe89 (2026-08-25) and its
+// revert d26174b62 (2026-09-20), this branch shipped a LOCAL
+// 0067_add_lease_granted_node.up.sql, unrelated to and numbered the same as
+// upstream's 0067_add_versioned_beads_schema.up.sql, which an upstream/main
+// merge brought in independently. A database that ran a `bd` built from that
+// window recorded schema_migrations version=67 with the LOCAL file's
+// content_hash. currentVersion() (and therefore runMigrations' minVersion
+// skip) compares only the integer version, never content_hash, so every
+// binary built after the revert treats 0067 as already applied and skips its
+// SQL text entirely — issue_versions, store_epoch and
+// issues/wisps.current_revision are never created. The pass then reaches
+// 0068, whose own guard queries INFORMATION_SCHEMA.COLUMNS for
+// issue_versions.attribution_status: on a table that does not exist that
+// query returns zero rows exactly like "column missing" does, so the guard
+// fires an ALTER TABLE against a table that was never created and Dolt
+// refuses it with Error 1146 ("table not found: issue_versions") — the
+// mid-review revert cleared the collision going forward, but cannot rewrite
+// schema_migrations rows a store already committed under the collided number.
+//
+// 0067 is itself fully replay-safe by construction (its CREATE TABLEs are
+// IF NOT EXISTS and its ADD COLUMNs are INFORMATION_SCHEMA-guarded PREPAREs
+// — see that file's header), so the fix is simply to run its frozen text
+// here, once, immediately before 0068 — the same "replay the frozen file in
+// Go" shape ensureWispTablesForMixedBlockedRecompute uses for the structurally
+// identical #4695 (main pass reaches a migration whose dependency a skipped
+// earlier version was supposed to create). A store where 0067 genuinely
+// applied has all three artifacts already and this is a no-op: none of
+// 0067's guards fire a second time, and no table is newly dirtied for
+// commitMigrationStep to stage.
+func healCollidedVersionedBeadsSchema(ctx context.Context, db DBConn) error {
+	hasIssueVersions, err := schemaTableExists(ctx, db, "issue_versions")
+	if err != nil {
+		return fmt.Errorf("checking issue_versions table: %w", err)
+	}
+	hasStoreEpoch, err := schemaTableExists(ctx, db, "store_epoch")
+	if err != nil {
+		return fmt.Errorf("checking store_epoch table: %w", err)
+	}
+	hasCurrentRevision, err := schemaColumnExists(ctx, db, "issues", "current_revision")
+	if err != nil {
+		return fmt.Errorf("checking issues.current_revision: %w", err)
+	}
+	if hasIssueVersions && hasStoreEpoch && hasCurrentRevision {
+		return nil
+	}
+
+	sql, err := MigrationSQL("0067_add_versioned_beads_schema.up.sql")
+	if err != nil {
+		return fmt.Errorf("reading migration 0067 for collision repair: %w", err)
+	}
+	if err := execMigrationBody(ctx, db, sql); err != nil {
+		return fmt.Errorf("replaying migration 0067 for collision repair: %w", err)
+	}
+	return nil
 }
 
 // The four dolt_nonlocal_tables rows migration 0040 inserts (and migration 0041
