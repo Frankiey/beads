@@ -420,6 +420,10 @@ func TestServedLifecycleCloseAndReopenRequireActorAndIssueID(t *testing.T) {
 	conformance.RunLifecycleCloseAndReopenRequireActorAndIssueID(t, t.Context(), newServedCloseReopenFixture(t, "hlra"))
 }
 
+func TestServedLifecycleEventActorMatchesTheRequest(t *testing.T) {
+	conformance.RunLifecycleEventActorMatchesTheRequest(t, t.Context(), newServedCloseReopenFixture(t, "hlea"))
+}
+
 // TestServedLifecycleReopenProvenanceLabelsHistory is PARKED: reopenIssue
 // publishes no provenance member and the server writes its own fixed label, so
 // the client refuses the field rather than letting a caller believe their label
@@ -512,9 +516,10 @@ func TestServedLifecycleUpdatePreservesTheCreationStamp(t *testing.T) {
 // The other two of the four race IssuePatch.SpecID/.AwaitID/.Owner updates
 // against each other (RunLifecycleUpdateExpectedVersionSingleWinnerWithDisjointColumnsUnderConcurrency,
 // RunLifecycleUpdateExpectedVersionSingleWinnerAcrossUpdateAndCloseUnderConcurrency),
-// and stay off this leg: those three fields are refused on updateIssue by
-// name (W-IssuePatch.SpecID, W-IssuePatch.AwaitID, W-IssuePatch.Owner,
-// internal/httpclient/encode/ledger.go), a pre-existing D8 refuse-not-drop
+// and stay off this leg: SpecID and Owner are still refused on updateIssue by
+// name (W-IssuePatch.SpecID, W-IssuePatch.Owner,
+// internal/httpclient/encode/ledger.go; AwaitID is carried
+// behind issues.update.gates), a pre-existing D8 refuse-not-drop
 // decision this slice does not reopen, not a race outcome the wire could
 // report correctly — see issuePatchFieldsNotOnUpdateWireWaiverReason
 // (internal/storage/leg_contract_wiring_test.go).
@@ -640,6 +645,8 @@ func (env *servedEnv) updateClaimSubject(t *testing.T, advertised bool) (*Store,
 			return token == wire.CapIssuesUpdateClaim
 		})
 	}
+	// Deliberately v0 and outside the protocol seam; servedDialsOutsideTheSwitch
+	// (served_protocol_seam_test.go) records why.
 	client, err := wire.New(env.subject.target.BaseURL, nil, wire.Options{HTTPClient: &http.Client{Transport: transport}})
 	if err != nil {
 		t.Fatalf("build the client: %v", err)
@@ -1027,6 +1034,18 @@ func TestServedLifecycleUpdateRefusesATemplate(t *testing.T) {
 // the guard's stand-down: allow_template rides the wire and the role honours it.
 func TestServedLifecycleUpdateAllowTemplateEditsATemplate(t *testing.T) {
 	conformance.RunLifecycleUpdateAllowTemplateEditsATemplate(t, t.Context(), newServedUpdateFixture(t, "hlua"))
+}
+
+// TestServedLifecycleUpdatePatchesTheGateMembers RUNS:
+// the served Config advertises issues.update.gates and this client sends
+// await_id and waiters to a server that does. It and the bounds case below
+// were parked on W-IssuePatch.AwaitID, now retired.
+func TestServedLifecycleUpdatePatchesTheGateMembers(t *testing.T) {
+	conformance.RunLifecycleUpdatePatchesTheGateMembers(t, t.Context(), newServedUpdateFixture(t, "hlugate"))
+}
+
+func TestServedLifecycleUpdateBoundsTheGateMembers(t *testing.T) {
+	conformance.RunLifecycleUpdateBoundsTheGateMembers(t, t.Context(), newServedUpdateFixture(t, "hlugbnd"))
 }
 
 func TestServedLifecycleUpdateRefusesUnknownIDsAndActorlessRequests(t *testing.T) {
