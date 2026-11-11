@@ -1441,6 +1441,31 @@ bd cursor-hook
   hidden: true
   runnable: true
 
+bd dashboard
+  use: "dashboard"
+  short: "Open a live web-based dashboard in your browser"
+  hidden: false
+  runnable: true
+  long:
+    | Start an embedded HTTP server and open a live web-based dashboard.
+    |
+    | The dashboard provides a Kanban board with real-time updates, dependency graph,
+    | ready work queue, and activity feed — all powered by the same storage backend
+    | used by the CLI.
+    |
+    | The server binds to localhost only and stops when you press Ctrl-C.
+  example:
+    |   bd dashboard                      # Open on default port 7700
+    |   bd dashboard --port 8080           # Custom port
+    |   bd dashboard --no-open             # Start server without opening browser
+    |   bd dashboard --read-only           # Disable mutations from the UI
+  flag --host type=string default="127.0.0.1" usage="Bind address"
+  flag --no-open type=bool default="false" usage="Do not open browser automatically"
+  flag --poll-interval type=int default="250" usage="Storage poll interval in milliseconds"
+  flag --port type=int default="7700" usage="Port to listen on (auto-increments if busy)"
+  flag --read-only type=bool default="false" usage="Disable mutations from the UI"
+  flag --static-dir type=string default="" usage="Dev mode: serve frontend assets from this directory on disk instead of the embedded build (e.g. internal/dashboard/static)"
+
 bd db-proxy-child
   use: "db-proxy-child"
   short: "Internal: run as the database proxy child process"

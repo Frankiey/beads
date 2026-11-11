@@ -250,6 +250,11 @@ var proxyCapabilityRegistry = []capabilityRow{
 	// proxied dual yet. S6 splits them into client-local and store-backed.
 	refusedPath("doctor", "proxy.doctor.unsupported", ProxyReasonUnimplemented, trackDegradation),
 
+	// --- dashboard ----------------------------------------------------------
+	// The embedded dashboard server reads the local store directly; it has no
+	// proxied dual yet.
+	refusedPath("dashboard", "proxy.dashboard.unsupported", ProxyReasonUnimplemented, trackLongTail),
+
 	// --- backup / restore ---------------------------------------------------
 	// CALL DOLT_BACKUP(...) is pure SQL over a connection proxied mode already
 	// owns, so routing this family needed no proxy work at all — see

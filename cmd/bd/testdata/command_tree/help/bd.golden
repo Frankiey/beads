@@ -122,6 +122,7 @@ Additional Commands:
   blocked           Show blocked issues
   completion        Generate the autocompletion script for the specified shell
   cook              Compile a formula into a proto (ephemeral by default)
+  dashboard         Open a live web-based dashboard in your browser
   defer             Defer one or more issues for later
   formula           Manage workflow formulas
   github            GitHub integration commands
